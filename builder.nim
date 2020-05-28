@@ -1,6 +1,6 @@
 import math, sugar
-import good_table
-export good_table
+import table
+export table
 
 
 const MAX_BUFFER_SIZE* = 2^31

@@ -10,7 +10,7 @@ type Offsets* = uoffset | soffset | voffset
 type Something* = SomeInteger | bool
 type Vtable* = object
   Bytes*: seq[byte]
-  Pos: uoffset
+  Pos*: uoffset
 
 
 func GetVal*[T](b: seq[byte]): T {.inline.} =

@@ -1,6 +1,5 @@
 import math, sugar
 import table
-export table
 
 
 const MAX_BUFFER_SIZE* = 2^31
@@ -27,25 +26,25 @@ func newBuilder*(size: int): Builder =
 
 using self: var Builder
 
-proc output*(self): seq[byte] =
+proc Output*(self): seq[byte] =
   if not self.finished:
     quit("Builder not finished")
 
   return self.bytes[self.head..^1]
 
-func offset*(self): uoffset =
+func Offset*(self): uoffset =
   result = self.bytes.len.uoffset - self.head
 
-proc startObject*(self; numfields: int) =
+proc StartObject*(self; numfields: int) =
   if self.nested:
     quit("builder is nested")
   self.current_vtable = collect(newSeq):  #Generator with some sugar
     for _ in 0..numfields: 0.uoffset
 
-  self.objectEnd = self.offset()
+  self.objectEnd = self.Offset()
   self.nested = true
 
-proc growByteBuffer*(self) =
+proc GrowByteBuffer*(self) =
   if self.bytes.len == MAX_BUFFER_SIZE:
     quit("flatbuffers: cannot grow buffer beyond 2 gigabytes")
   var newSize = min(self.bytes.len * 2, MAX_BUFFER_SIZE)
@@ -72,24 +71,24 @@ proc Prep*(self; size: int, additionalBytes: int) =
 
   while self.head.int < alignsize + size + additionalBytes:
     let oldbufSize = self.bytes.len
-    self.growByteBuffer()
+    self.GrowByteBuffer()
     let update_head = self.head + (self.bytes.len - oldbufSize).uoffset
     self.head = update_head
   self.Pad(alignsize)
 
 proc PrependOffsetRelative*[T: Offsets](self; off: T) =
   self.Prep(T.sizeof, 0)
-  if not off <= self.offset.T:
+  if not off <= self.Offset.T:
     quit("flatbuffers: Offset arithmetic error.")
 
-  let off2: T = self.offset.T - off + sizeof(T).T
+  let off2: T = self.Offset.T - off + sizeof(T).T
   self.Place(off2)
 
 proc Add*[T](self; n: T) =
   self.Prep(T.sizeof, 0)
   WriteVal(self.bytes.toOpenArray(self.head.int, self.bytes.len - 1), n)
 
-proc vtableEqual*(a: seq[uoffset], objectStart: uoffset, b: seq[byte]): bool =
+proc VtableEqual*(a: seq[uoffset], objectStart: uoffset, b: seq[byte]): bool =
   if a.len * voffset.sizeof != b.len:
     return false
 
@@ -106,10 +105,10 @@ proc vtableEqual*(a: seq[uoffset], objectStart: uoffset, b: seq[byte]): bool =
 
   return true
 
-proc writeVtable*(self): uoffset =
+proc WriteVtable*(self): uoffset =
   self.PrependOffsetRelative(0.soffset)
 
-  let objectOffset = self.offset
+  let objectOffset = self.Offset
   var existingVtable = 0.uoffset
 
   var i = self.current_vtable.len - 1
@@ -128,7 +127,7 @@ proc writeVtable*(self): uoffset =
       vt2End = vt2Start + vt2Len.int
       vt2 = self.bytes[vt2Start + metadata..vt2End]
 
-    if vtableEqual(self.current_vtable, objectOffset, vt2):
+    if VtableEqual(self.current_vtable, objectOffset, vt2):
       existingVtable = vt2Offset
       break
 
@@ -150,7 +149,7 @@ proc writeVtable*(self): uoffset =
     WriteVal(self.bytes.toOpenArray(objectStart.int, self.bytes.len - 1),
       (existingVtable - objectOffset).soffset)
       
-    self.vtables.add self.offset
+    self.vtables.add self.Offset
 
   else:
     let objectStart = self.bytes.len.soffset - objectOffset.soffset
@@ -166,7 +165,7 @@ proc writeVtable*(self): uoffset =
 proc EndObject*(self): uoffset =
   if not self.nested:
     quit("builder is not nested")
-  result = self.writeVtable()
+  result = self.WriteVtable()
   self.nested = false
   
 proc StartVector*(self; elemSize: int, numElems: int, alignment: int): uoffset =
@@ -175,14 +174,14 @@ proc StartVector*(self; elemSize: int, numElems: int, alignment: int): uoffset =
   self.nested = true
   self.Prep(sizeof(uint32), elemSize * numElems)
   self.Prep(alignment, elemSize * numElems)
-  return self.offset
+  return self.Offset
 
 proc EndVector*(self; vectorNumElems: int): uoffset =
   if not self.nested:
     quit("builder is not nested")
   self.nested = false
   self.Place(vectorNumElems)
-  result = self.offset
+  result = self.Offset
 
 proc Create*(self; s: string | seq[byte]): uoffset = #Both CreateString and CreateByeVector functionality
   if self.nested:
@@ -202,7 +201,7 @@ proc Create*(self; s: string | seq[byte]): uoffset = #Both CreateString and Crea
   return self.EndVector(s.len)
 
 proc Slot*(self; slotnum: int) =
-  self.current_vtable[slotnum] = self.offset
+  self.current_vtable[slotnum] = self.Offset
 
 proc Finish*(self; rootTable: uoffset) =
   if self.nested:
@@ -216,3 +215,8 @@ proc Finish*(self; rootTable: uoffset) =
 proc Prepend*[T](self; x: T) =
   self.Prep(x.sizeof, 0)
   self.Place(x)
+
+proc PrependSlot*[T](self; o: int, x, d: T) =
+  if x != d:
+    self.Prepend(x)
+    self.Slot(o)

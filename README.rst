@@ -30,15 +30,19 @@ Usage
 -----
 
 Just import the library and pass the `generateCode` macro a path to the .fbs file.
-```nim
-import Nimflatbuffers
 
-generateCode("test.fbs")
-```
+.. code:: nim
+
+   import Nimflatbuffers
+   
+   generateCode("test.fbs")
+
 
 Optionally, pass an output directory name ("./output" by default).
-```nim
-import Nimflatbuffers
 
-generateCode("test.fbs", "../bin/myOwnOutput")
-```
+.. code:: nim
+
+   import Nimflatbuffers
+   
+   generateCode("test.fbs", "../bin/myOwnOutput")
+   

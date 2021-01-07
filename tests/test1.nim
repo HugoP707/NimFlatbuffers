@@ -1,3 +1,3 @@
-import ../flatn
+import ../src/Nimflatbuffers
+
 generateCode("test1.fbs")
-import output/rlbot_flat

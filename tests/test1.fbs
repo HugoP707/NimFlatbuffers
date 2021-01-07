@@ -1,6 +1,4 @@
-// This was the specific usecase I needed to cover, all of the stuff here, (and a bit more)
-// is supported
-
+// This was a small part of the specific usecase I needed to cover
 
 namespace rlbot.flat;
 

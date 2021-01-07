@@ -20,6 +20,12 @@ proc z*(this: var Vector3): float32 =
 proc `z=`*(this: var Vector3; n: float32; ) =
   discard this.tab.Mutate(this.tab.Pos + 8, n)
 
+proc CreateVector3*(this: var Builder; x: float32; y: float32; z: float32) =
+  this.Prep(4, 12)
+  this.Prepend(x)
+  this.Prepend(y)
+  this.Prepend(z)
+
 
 type
   ControllerState* = object of FlatObj
@@ -144,6 +150,9 @@ proc ControllerStateAddHandbrake*(this: var Builder; handbrake: bool) =
 proc ControllerStateAddUseItem*(this: var Builder; useItem: bool) =
   this.PrependSlot(8, useItem, default(bool))
 
+proc ControllerStateEnd*(this: var Builder): uoffset =
+  result = this.EndObject()
+
 
 type
   PlayerInput* = object of FlatObj
@@ -158,13 +167,17 @@ proc playerIndex*(this: var PlayerInput): int32 =
 proc `playerIndex=`*(this: var PlayerInput; n: int32) =
   discard this.tab.MutateSlot(4, n)
 
-proc controllerState*(this: var PlayerInput): ControllerState =
+proc controllerState*(this: var PlayerInput; j: int): uoffset =
   var o = this.tab.Offset(6).uoffset
   if o != 0:
-    var x = this.tab.Indirect(o + this.tab.Pos)
-    result.Init(this.tab.Bytes, x)
+    var x = this.tab.Vector(o)
+    x += j.uoffset * 4.uoffset
+    result = Get[uoffset](this.tab, o + this.tab.Pos)
   else:
-    result = default(type(result))
+    discard
+
+proc controllerStateSize*(this: var PlayerInput; n: uoffset) =
+  discard this.tab.MutateSlot(6, n)
 
 proc PlayerInputStart*(this: var Builder) =
   this.StartObject(2)
@@ -175,3 +188,6 @@ proc PlayerInputAddPlayerIndex*(this: var Builder; playerIndex: int32) =
 proc PlayerInputAddControllerState*(this: var Builder;
                                     controllerState: ControllerState) =
   this.PrependSlot(1, controllerState, default(ControllerState))
+
+proc PlayerInputEnd*(this: var Builder): uoffset =
+  result = this.EndObject()

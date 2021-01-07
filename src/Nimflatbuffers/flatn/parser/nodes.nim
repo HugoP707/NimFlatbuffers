@@ -50,7 +50,7 @@ const
               "uint64": "uint64",
               "float32": "float32",
               "float64": "float64",
-              "string": "string"
+              "string": "uoffset"
               }.toTable
 
   NimSizes* = {"bool": 1,
@@ -79,10 +79,13 @@ type Node* = object
       enumType*: string
     of tkStruct:
       alignment*: int
+      structSize*: int
     of tkTable:
       elements*: int16
     of tkUnion:
       discard
+    of nkOpenArray:
+      inlineSize*: int
     else:
       discard
   size*: int
@@ -244,13 +247,17 @@ proc parseTable(this: var Node) =
         if this.children[i + 2].lexeme in BasicTypes:
           this.children[i + 2].lexeme = NimTypes[this.children[i + 2].lexeme]
           this.children[i + 2].size = NimSizes[this.children[i + 2].lexeme]
+        else:
+          this.children[i + 2].size = 4
         braceChildren.add(
           Node(
             kind: tkColon,
             children: @[
               this.children[i - 1],
               Node(
-                kind: nkOpenArray,
+                kind: nkOpenArray, # vector
+                lexeme: "uoffset",
+                inlineSize: this.children[i + 2].size,# we will find the inner aligment when iterating with fieldTypeSlots/T
                 children: @[
                   this.children[i + 2],
                 ]
@@ -331,10 +338,11 @@ proc parseStruct(this: var Node) =
     Node(
       kind: nkBraceExpr,
       children: braceChildren,
-      size: StructSize,
     )
   )
 
+  this.alignment = StructAlignment
+  this.structSize = StructSize
   this.children = childrenArr
 
 proc addStruct*(this: var seq[Node], x: Node) =

@@ -67,6 +67,13 @@ iterator fieldTypeSlots(node: Node): (string, string, int, int, int, Node) =
   #var size: int = 0
   for child in node.children[1].children:
     if child.children[1].kind == nkOpenArray:
+      if maxSize < 4:
+        maxSize = 4
+
+    elif child.children[1].kind == tkStruct:
+      if maxSize < child.children[1].structSize:
+        maxSize = child.children[1].structSize
+      #[
       if child.children[1].children[0].lexeme in ["bool", "byte"]:
         if maxSize < 1:
           maxSize = 1
@@ -82,12 +89,13 @@ iterator fieldTypeSlots(node: Node): (string, string, int, int, int, Node) =
       elif child.children[1].children[0].lexeme.contains("64"):
         if maxSize < 8:
           maxSize = 8
-      elif child.children[1].children[0].lexeme == "string":
+      elif child.children[1].children[0].lexeme == "uoffset":
         if maxSize < 4:
           maxSize = 4
       else:
         if maxSize < 4:
           maxSize = 4
+          ]#
     elif child.children[1].lexeme in ["bool", "byte"]:
       if maxSize < 1:
         maxSize = 1
@@ -103,7 +111,7 @@ iterator fieldTypeSlots(node: Node): (string, string, int, int, int, Node) =
     elif child.children[1].lexeme.contains("64"):
       if maxSize < 8:
         maxSize = 8
-    elif child.children[1].lexeme == "string":
+    elif child.children[1].lexeme == "uoffset":
       if maxSize < 4:
         maxSize = 4
     else:
@@ -143,8 +151,10 @@ iterator fieldTypeSlotsT(node: Node): (string, string, int) =
     elif child.children[1].lexeme.contains("64"):
       if maxSize < 8:
         maxSize = 8
-    elif child.children[1].lexeme == "string":
-      quit("dont know wtf to do with strings")
+    elif child.children[1].lexeme == "uoffset":
+      if maxSize < 4:
+        maxSize = 4
+      #quit("dont know wtf to do with strings")
     else:
       maxSize = 4
 
@@ -156,6 +166,10 @@ iterator fieldTypeSlotsT(node: Node): (string, string, int) =
 proc stringify(n: NimNode): string =
   #n.repr.replace("type\n  ", "type ").replace("; )", ")")
   n.repr
+
+proc newEnder(node: Node): NimNode {.used.} =
+  result = parseStmt("proc " & node.children[0].lexeme & "End*(this: var Builder): uoffset =\n" &
+  "  result = this.EndObject()\n")
 
 proc newStructGetter(obj, field, typ: string, off: int): NimNode =
   result = newProc(
@@ -227,35 +241,46 @@ proc newStructSetter(obj, field, typ: string, off: int): NimNode =
     )
   )
 
-proc newStructCreator(obj, field, typ: string, off: int): NimNode {.used.} =
+proc newStructCreator(node: Node): NimNode {.used.} =
+  var
+    args: seq[NimNode]
+    toPrepend: string
+
+  args = @[
+    newEmptyNode(),
+    nnkIdentDefs.newTree(
+      ident "this",
+      nnkVarTy.newTree(
+        ident "Builder"
+      ),
+      newEmptyNode()
+    )
+  ]
+
+  for child in node.children[1].children:
+    toPrepend.add "this.Prepend(" & child.children[0].lexeme & ")"
+    toPrepend.add "\n"
+    args.add nnkIdentDefs.newTree(
+      ident child.children[0].lexeme,
+      ident child.children[1].lexeme,
+      newEmptyNode()
+    )
+
   result = newProc(
     nnkPostFix.newTree(
       ident "*",
-      ident "`" & field & "Type=`"
+      ident "Create" & node.children[0].lexeme
     ),
-    [
-      # TODO: dont return bool
-      newEmptyNode(),
-      nnkIdentDefs.newTree(
-        ident "this",
-        nnkVarTy.newTree(
-          ident obj
-        ),
-        newEmptyNode()
-      ),
-      nnkIdentDefs.newTree(
-        ident "n",
-        ident typ,
-        newEmptyNode()
-      ),
-      newEmptyNode()
-    ],
+    args,
     parseStmt(
-      "discard this.tab.Mutate(this.tab.Pos + " & $off & ", n)"
+      "this.Prep(" & $node.alignment & ", " & $node.structSize & ")\n" &
+      toPrepend
+
     )
   )
 
 proc newStruct(node: Node): seq[string] =
+  echo "newStrict"
   var
     objName = nnkPostfix.newTree(ident"*", ident(node.children[0].lexeme))
     #objSize = node.size
@@ -286,12 +311,13 @@ proc newStruct(node: Node): seq[string] =
       mutatorProcs.add newStructGetter(objName[1].strVal, field, typ, off).stringify
       # TODO: Create acutal Setter for structs
       mutatorProcs.add newStructSetter(objName[1].strVal, field, typ, off).stringify
+
   result.add nnkTypeSection.newTree(nnkTypeDef.newTree(objName, newEmptyNode(), objType)).stringify
   result.add ("\n")
   result.add mutatorProcs
+  result.add ("\n")
+  result.add newStructCreator(node).stringify
   result.add ("\n\n")
-  #result.add newStructCreator(node).repr
-  #result.add newTableEnder(node).repr
 
 proc newTableGetter(obj, field, typ: string, off: int): NimNode =
   result = newProc(
@@ -371,7 +397,7 @@ proc newTableSetter(obj, field, typ: string, off: int): NimNode =
     )
   )
 
-proc newTableArrayGetter(obj, field, typ: string, off: int, size: int): NimNode =
+proc newTableArrayGetter(obj, field, typ: string; off, inlineSize, size: int): NimNode =
   result = newProc(
     nnkPostFix.newTree(
       ident "*",
@@ -396,10 +422,10 @@ proc newTableArrayGetter(obj, field, typ: string, off: int, size: int): NimNode 
       "var o = this.tab.Offset(" & $off & ").uoffset\n" &
       "if o != 0:\n" &
       "  var x = this.tab.Vector(o)\n" &
-      "  x += j * maxSize\n" &
+      "  x += j.uoffset * " & $inlineSize & ".uoffset\n" &
       "  result = this.tab.Get[:" & typ & "](o + this.tab.Pos)\n" &
       "else:\n" &
-      "  result = false\n"
+      "  discard\n"
     )
   )
 
@@ -407,7 +433,7 @@ proc newTableArrayLength(obj, field, typ: string, off: int): NimNode =
   result = newProc(
     nnkPostFix.newTree(
       ident "*",
-      ident "`" & field & "=`"
+      ident field & "Size"
     ),
     [
       newEmptyNode(),
@@ -701,10 +727,6 @@ proc newTableStarter(node: Node): NimNode =
     )
   )
 
-proc newTableEnder(node: Node): NimNode {.used.} =
-  result = parseStmt("proc End*(this: var Builder): uoffset =\n" &
-  "  result = this.EndObject()\n")
-
 proc newTable(node: Node): seq[string] =
   var
     objName = nnkPostfix.newTree(ident"*", ident(node.children[0].lexeme))
@@ -720,11 +742,11 @@ proc newTable(node: Node): seq[string] =
     )
 
   for field, typ, off, slo, size, child in node.fieldTypeSlots:
-    if child.kind == nkOpenArray:
+    if child.children[1].kind == nkOpenArray:
       mutatorProcs.add ("\n")
-      mutatorProcs.add newTableArrayGetter(objName[1].strVal, field, typ, off, size).stringify
+      mutatorProcs.add newTableArrayGetter(objName[1].strVal, field, "uoffset", off, child.children[1].inlineSize, size).stringify
       mutatorProcs.add ("\n")
-      mutatorProcs.add newTableArrayLength(objName[1].strVal, field, typ, off).stringify
+      mutatorProcs.add newTableArrayLength(objName[1].strVal, field, "uoffset", off).stringify
     else:
       if typ notin BasicNimTypes:
         if typ in toSeq(unions.namesU):
@@ -761,7 +783,7 @@ proc newTable(node: Node): seq[string] =
   for field, typ, off, slo, size, child in node.fieldTypeSlots:
     result.add ("\n")
     if child.kind == nkOpenArray:
-      result.add newTableArrayAdder(objName[1].strVal, field, typ, slo).stringify
+      result.add newTableArrayAdder(objName[1].strVal, field, "uoffset", slo).stringify
     else:
       if typ notin BasicNimTypes:
         if typ in toSeq(unions.namesU):
@@ -775,7 +797,7 @@ proc newTable(node: Node): seq[string] =
           result.add newTableAdder(objName[1].strVal, field, typ, slo).stringify
       else:
         result.add newTableAdder(objName[1].strVal, field, typ, slo).stringify
-  #result.add newTableEnder(node).stringify
+  result.add newEnder(node).stringify
   result.add ("\n\n")
 
 proc newEnum(node: Node): seq[string] =

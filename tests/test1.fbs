@@ -39,5 +39,5 @@ table ControllerState {
 
 table PlayerInput {
   playerIndex:int;
-  controllerState:ControllerState;
+  controllerState:[ControllerState];
 }

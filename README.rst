@@ -10,17 +10,17 @@ It supports a decent subset of .fbs schema language, from my experience, the mos
 
 Full list of features it supports/will support:
 
-=======     ===================
-Support           Feature
-=======     ===================
-DONE        Structs
-DONE        Tables
-DONE        Unions
-TODO        Code reordering
-TODO        Strings and vectors
-DONE        namespaces
-Wont do     Nested namespaces
-=======     ===================
+============       ===================
+Support                  Feature
+============       ===================
+DONE               Structs
+DONE               Tables
+DONE               Unions
+TODO               Code reordering
+IN PROGRESS        Strings and vectors
+DONE               namespaces
+Wont do            Nested namespaces
+============       ===================
 
 
 \*Strings and vectors are supported in the library, but the generated code does not correctly handle them, changes shouldnt be too hard to make them work though.

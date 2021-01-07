@@ -86,6 +86,7 @@ type Node* = object
       discard
     of nkOpenArray:
       inlineSize*: int
+      fieldSize*: int
     else:
       discard
   size*: int
@@ -233,6 +234,8 @@ proc parseTable(this: var Node) =
   doAssert this.children[1].kind == tkLeftBrace
   doAssert this.children[^1].kind == tkRightBrace
 
+  var VectorAlignment: int
+  var VectorInlineSize: int
   var childrenArr: seq[Node]
   childrenArr.add(this.children[0])
 
@@ -247,8 +250,12 @@ proc parseTable(this: var Node) =
         if this.children[i + 2].lexeme in BasicTypes:
           this.children[i + 2].lexeme = NimTypes[this.children[i + 2].lexeme]
           this.children[i + 2].size = NimSizes[this.children[i + 2].lexeme]
+          VectorAlignment = this.children[i + 2].size
+          VectorInlineSize = VectorAlignment
         else:
           this.children[i + 2].size = 4
+          VectorAlignment = this.children[i + 2].size
+          VectorInlineSize = VectorAlignment
         braceChildren.add(
           Node(
             kind: tkColon,
@@ -257,7 +264,8 @@ proc parseTable(this: var Node) =
               Node(
                 kind: nkOpenArray, # vector
                 lexeme: "uoffset",
-                inlineSize: this.children[i + 2].size,# we will find the inner aligment when iterating with fieldTypeSlots/T
+                inlineSize: VectorInlineSize,
+                fieldSize: VectorAlignment,
                 children: @[
                   this.children[i + 2],
                 ]

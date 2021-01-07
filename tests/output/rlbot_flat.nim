@@ -31,7 +31,7 @@ type
   ControllerState* = object of FlatObj
 
 proc throttle*(this: var ControllerState): float32 =
-  var o = this.tab.Offset(4).uoffset
+  var o = this.tab.Offset(4)
   if o != 0:
     result = Get[float32](this.tab, o + this.tab.Pos)
   else:
@@ -41,7 +41,7 @@ proc `throttle=`*(this: var ControllerState; n: float32) =
   discard this.tab.MutateSlot(4, n)
 
 proc steer*(this: var ControllerState): float32 =
-  var o = this.tab.Offset(6).uoffset
+  var o = this.tab.Offset(6)
   if o != 0:
     result = Get[float32](this.tab, o + this.tab.Pos)
   else:
@@ -51,7 +51,7 @@ proc `steer=`*(this: var ControllerState; n: float32) =
   discard this.tab.MutateSlot(6, n)
 
 proc pitch*(this: var ControllerState): float32 =
-  var o = this.tab.Offset(8).uoffset
+  var o = this.tab.Offset(8)
   if o != 0:
     result = Get[float32](this.tab, o + this.tab.Pos)
   else:
@@ -61,7 +61,7 @@ proc `pitch=`*(this: var ControllerState; n: float32) =
   discard this.tab.MutateSlot(8, n)
 
 proc yaw*(this: var ControllerState): float32 =
-  var o = this.tab.Offset(10).uoffset
+  var o = this.tab.Offset(10)
   if o != 0:
     result = Get[float32](this.tab, o + this.tab.Pos)
   else:
@@ -71,7 +71,7 @@ proc `yaw=`*(this: var ControllerState; n: float32) =
   discard this.tab.MutateSlot(10, n)
 
 proc roll*(this: var ControllerState): float32 =
-  var o = this.tab.Offset(12).uoffset
+  var o = this.tab.Offset(12)
   if o != 0:
     result = Get[float32](this.tab, o + this.tab.Pos)
   else:
@@ -81,7 +81,7 @@ proc `roll=`*(this: var ControllerState; n: float32) =
   discard this.tab.MutateSlot(12, n)
 
 proc jump*(this: var ControllerState): bool =
-  var o = this.tab.Offset(14).uoffset
+  var o = this.tab.Offset(14)
   if o != 0:
     result = Get[bool](this.tab, o + this.tab.Pos)
   else:
@@ -91,7 +91,7 @@ proc `jump=`*(this: var ControllerState; n: bool) =
   discard this.tab.MutateSlot(14, n)
 
 proc boost*(this: var ControllerState): bool =
-  var o = this.tab.Offset(16).uoffset
+  var o = this.tab.Offset(16)
   if o != 0:
     result = Get[bool](this.tab, o + this.tab.Pos)
   else:
@@ -101,7 +101,7 @@ proc `boost=`*(this: var ControllerState; n: bool) =
   discard this.tab.MutateSlot(16, n)
 
 proc handbrake*(this: var ControllerState): bool =
-  var o = this.tab.Offset(18).uoffset
+  var o = this.tab.Offset(18)
   if o != 0:
     result = Get[bool](this.tab, o + this.tab.Pos)
   else:
@@ -111,7 +111,7 @@ proc `handbrake=`*(this: var ControllerState; n: bool) =
   discard this.tab.MutateSlot(18, n)
 
 proc useItem*(this: var ControllerState): bool =
-  var o = this.tab.Offset(20).uoffset
+  var o = this.tab.Offset(20)
   if o != 0:
     result = Get[bool](this.tab, o + this.tab.Pos)
   else:
@@ -158,7 +158,7 @@ type
   PlayerInput* = object of FlatObj
 
 proc playerIndex*(this: var PlayerInput): int32 =
-  var o = this.tab.Offset(4).uoffset
+  var o = this.tab.Offset(4)
   if o != 0:
     result = Get[int32](this.tab, o + this.tab.Pos)
   else:
@@ -167,17 +167,19 @@ proc playerIndex*(this: var PlayerInput): int32 =
 proc `playerIndex=`*(this: var PlayerInput; n: int32) =
   discard this.tab.MutateSlot(4, n)
 
-proc controllerState*(this: var PlayerInput; j: int): uoffset =
-  var o = this.tab.Offset(6).uoffset
+proc controllerState*(this: var PlayerInput; j: int): int16 =
+  var o = this.tab.Offset(6)
   if o != 0:
     var x = this.tab.Vector(o)
-    x += j.uoffset * 4.uoffset
-    result = Get[uoffset](this.tab, o + this.tab.Pos)
+    x += j.uoffset * 2.uoffset
+    result = Get[int16](this.tab, o + this.tab.Pos)
   else:
     discard
 
-proc controllerStateSize*(this: var PlayerInput; n: uoffset) =
-  discard this.tab.MutateSlot(6, n)
+proc controllerStateLength*(this: var PlayerInput): int =
+  var o = this.tab.Offset(6)
+  if o != 0:
+    result = this.tab.Vectorlen(o)
 
 proc PlayerInputStart*(this: var Builder) =
   this.StartObject(2)
@@ -185,9 +187,11 @@ proc PlayerInputStart*(this: var Builder) =
 proc PlayerInputAddPlayerIndex*(this: var Builder; playerIndex: int32) =
   this.PrependSlot(0, playerIndex, default(int32))
 
-proc PlayerInputAddControllerState*(this: var Builder;
-                                    controllerState: ControllerState) =
-  this.PrependSlot(1, controllerState, default(ControllerState))
+proc PlayerInputAddControllerState*(this: var Builder; controllerState: uoffset) =
+  this.PrependSlot(1, controllerState, default(uoffset))
+
+proc PlayerInputStartercontrollerStateVector*(this: var Builder; numElems: int): uoffset =
+  this.StartVector(2, numElems, 2)
 
 proc PlayerInputEnd*(this: var Builder): uoffset =
   result = this.EndObject()

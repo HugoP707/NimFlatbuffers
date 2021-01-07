@@ -220,7 +220,6 @@ proc newStructSetter(obj, field, typ: string, off: int): NimNode =
       ident "`" & field & "=`"
     ),
     [
-      # TODO: dont return bool
       newEmptyNode(),
       nnkIdentDefs.newTree(
         ident "this",
@@ -280,7 +279,6 @@ proc newStructCreator(node: Node): NimNode {.used.} =
   )
 
 proc newStruct(node: Node): seq[string] =
-  echo "newStrict"
   var
     objName = nnkPostfix.newTree(ident"*", ident(node.children[0].lexeme))
     #objSize = node.size
@@ -303,13 +301,11 @@ proc newStruct(node: Node): seq[string] =
         echo("INVALID TYPE: [", typ, "] SKIPPING...")
         mutatorProcs.add("# SKIPPED FIELD, " & field & " of type " & typ)
       else:
-        # TODO: ~~Create acutal Getter and Setter for structs~~ confirm the getters and setters are correct
         mutatorProcs.add newStructGetterT(objName[1].strVal, field, typ, off).stringify
         mutatorProcs.add ("\n")
         mutatorProcs.add newStructSetter(objName[1].strVal, field, typ, off).stringify
     else:
       mutatorProcs.add newStructGetter(objName[1].strVal, field, typ, off).stringify
-      # TODO: Create acutal Setter for structs
       mutatorProcs.add newStructSetter(objName[1].strVal, field, typ, off).stringify
 
   result.add nnkTypeSection.newTree(nnkTypeDef.newTree(objName, newEmptyNode(), objType)).stringify
@@ -336,7 +332,7 @@ proc newTableGetter(obj, field, typ: string, off: int): NimNode =
       )
     ],
     parseStmt(
-      "var o = this.tab.Offset(" & $off & ").uoffset\n" &
+      "var o = this.tab.Offset(" & $off & ")\n" &
       "if o != 0:\n" &
       "  " & "  result = this.tab.Get[:" & typ & "](o + this.tab.Pos)\n" &
       "else:\n" &
@@ -362,7 +358,7 @@ proc newTableGetterT(obj, field, typ: string; off: int): NimNode =
     ],
     parseStmt(
       #"var obj: " & typ & "\n" &
-      "var o = this.tab.Offset(" & $off & ").uoffset\n" &
+      "var o = this.tab.Offset(" & $off & ")\n" &
       "if o != 0:\n" &
       "  " & "  var x = this.tab.Indirect(o + this.tab.Pos)\n" &
       "  " & "  result.Init(this.tab.Bytes, x)\n" &
@@ -419,7 +415,7 @@ proc newTableArrayGetter(obj, field, typ: string; off, inlineSize, size: int): N
       )
     ],
     parseStmt(
-      "var o = this.tab.Offset(" & $off & ").uoffset\n" &
+      "var o = this.tab.Offset(" & $off & ")\n" &
       "if o != 0:\n" &
       "  var x = this.tab.Vector(o)\n" &
       "  x += j.uoffset * " & $inlineSize & ".uoffset\n" &
@@ -433,25 +429,48 @@ proc newTableArrayLength(obj, field, typ: string, off: int): NimNode =
   result = newProc(
     nnkPostFix.newTree(
       ident "*",
-      ident field & "Size"
+      ident field & "Length"
     ),
     [
-      newEmptyNode(),
+      ident "int",
       nnkIdentDefs.newTree(
         ident "this",
         nnkVarTy.newTree(
           ident obj
         ),
         newEmptyNode()
+      )
+    ],
+    parseStmt(
+      "var o = this.tab.Offset(" & $off & ")\n" &
+      "if o != 0:\n" &
+      "  result = this.tab.Vectorlen(o)\n"
+    )
+  )
+
+proc newTableArrayStarter(obj, field: string; inlineSize, fieldSize: int): NimNode =
+  result = newProc(
+    nnkPostFix.newTree(
+      ident "*",
+      ident obj & "Starter" & field & "Vector"
+    ),
+    [
+      ident "uoffset",
+      nnkIdentDefs.newTree(
+        ident "this",
+        nnkVarTy.newTree(
+          ident "Builder"
+        ),
+        newEmptyNode()
       ),
       nnkIdentDefs.newTree(
-        ident "n",
-        ident typ,
+        ident "numElems",
+        ident "int",
         newEmptyNode()
       )
     ],
     parseStmt(
-      "discard this.tab.MutateSlot(" & $off & ", n)\n"
+      "this.StartVector(" & $fieldSize & ", numElems, " & $inlineSize & ")\n"
     )
   )
 
@@ -472,7 +491,7 @@ proc newTableUnionTypeGetter(obj, field, typ: string, off: int): NimNode =
       )
     ],
     parseStmt(
-      "var o = this.tab.Offset(" & $off & ").uoffset\n" &
+      "var o = this.tab.Offset(" & $off & ")\n" &
       "if o != 0:\n" &
       "  result = this.tab.Get[:" & typ & "](o + this.tab.Pos)\n" &
       "else:\n" &
@@ -531,7 +550,7 @@ proc newTableUnionGetter(obj, field, typ: string; off: int): NimNode =
     ],
     parseStmt(
       #"var obj: " & typ & "\n" &
-      "var o = this.tab.Offset(" & $off & ").uoffset\n" &
+      "var o = this.tab.Offset(" & $off & ")\n" &
       "if o != 0:\n" &
       "  this.tab.Union(result.tab, o)\n" &
       #"  " & "  result = true\n" &
@@ -566,7 +585,7 @@ proc newTableUnionSetter(obj, field, typ: string; off: int): NimNode =
     ],
     parseStmt(
       #"var obj: " & typ & "\n" &
-      "var o = this.tab.Offset(" & $off & ").uoffset\n" &
+      "var o = this.tab.Offset(" & $off & ")\n" &
       "if o != 0:\n" &
       "  this.tab.Union(obj.tab, o)\n" &
       #"  " & "  result = true\n" &
@@ -743,10 +762,16 @@ proc newTable(node: Node): seq[string] =
 
   for field, typ, off, slo, size, child in node.fieldTypeSlots:
     if child.children[1].kind == nkOpenArray:
-      mutatorProcs.add ("\n")
-      mutatorProcs.add newTableArrayGetter(objName[1].strVal, field, "uoffset", off, child.children[1].inlineSize, size).stringify
-      mutatorProcs.add ("\n")
-      mutatorProcs.add newTableArrayLength(objName[1].strVal, field, "uoffset", off).stringify
+      if typ notin BasicNimTypes:
+        mutatorProcs.add ("\n")
+        mutatorProcs.add newTableArrayGetter(objName[1].strVal, field, "uoffset", off, child.children[1].inlineSize, size).stringify
+        mutatorProcs.add ("\n")
+        mutatorProcs.add newTableArrayLength(objName[1].strVal, field, "uoffset", off).stringify
+      else:
+        mutatorProcs.add ("\n")
+        mutatorProcs.add newTableArrayGetter(objName[1].strVal, field, typ, off, child.children[1].inlineSize, size).stringify
+        mutatorProcs.add ("\n")
+        mutatorProcs.add newTableArrayLength(objName[1].strVal, field, typ, off).stringify
     else:
       if typ notin BasicNimTypes:
         if typ in toSeq(unions.namesU):
@@ -782,8 +807,11 @@ proc newTable(node: Node): seq[string] =
   result.add newTableStarter(node).stringify
   for field, typ, off, slo, size, child in node.fieldTypeSlots:
     result.add ("\n")
-    if child.kind == nkOpenArray:
+    if child.children[1].kind == nkOpenArray:
       result.add newTableArrayAdder(objName[1].strVal, field, "uoffset", slo).stringify
+      result.add ("\n")
+      result.add newTableArrayStarter(objName[1].strVal, field,
+                                      child.children[1].inlineSize, child.children[1].fieldSize).stringify
     else:
       if typ notin BasicNimTypes:
         if typ in toSeq(unions.namesU):

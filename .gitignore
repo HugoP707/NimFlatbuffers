@@ -1,1 +1,5 @@
-"file" 
+/src/Nimflatbuffers/codegen/cppEffort/
+
+/src/Nimflatbuffers/codegen/outdated/
+
+/.idea/

@@ -1,5 +1,4 @@
-import
-  Nimflatbuffers
+import Nimflatbuffers
 
 
 type
@@ -167,12 +166,12 @@ proc playerIndex*(this: var PlayerInput): int32 =
 proc `playerIndex=`*(this: var PlayerInput; n: int32) =
   discard this.tab.MutateSlot(4, n)
 
-proc controllerState*(this: var PlayerInput; j: int): int16 =
+proc controllerState*(this: var PlayerInput; j: int): uoffset =
   var o = this.tab.Offset(6)
   if o != 0:
     var x = this.tab.Vector(o)
-    x += j.uoffset * 2.uoffset
-    result = Get[int16](this.tab, o + this.tab.Pos)
+    x += j.uoffset * 4.uoffset
+    result = Get[uoffset](this.tab, o + this.tab.Pos)
   else:
     discard
 
@@ -191,7 +190,7 @@ proc PlayerInputAddControllerState*(this: var Builder; controllerState: uoffset)
   this.PrependSlot(1, controllerState, default(uoffset))
 
 proc PlayerInputStartercontrollerStateVector*(this: var Builder; numElems: int): uoffset =
-  this.StartVector(2, numElems, 2)
+  this.StartVector(4, numElems, 4)
 
 proc PlayerInputEnd*(this: var Builder): uoffset =
   result = this.EndObject()

@@ -8,4 +8,4 @@ srcDir = "src"
 requires "nim >= 1.4.0"
 
 task test, "Runs the test":
-  exec "nim check tests/test1"
+   exec "nim check tests/test1"

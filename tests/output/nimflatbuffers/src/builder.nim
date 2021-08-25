@@ -1,4 +1,4 @@
-import math, sugar
+import math
 import table
 
 
@@ -50,8 +50,6 @@ proc StartObject*(this; numfields: int) =
     this.current_vtable = this.current_vtable[0..<numfields]
     for i in this.current_vtable.mitems():
       i = 0
-  #this.current_vtable = collect(newSeq):  #Generator with some sugar
-  #  for _ in 0..numfields: 0.uoffset
 
   this.objectEnd = this.Offset()
   this.nested = true

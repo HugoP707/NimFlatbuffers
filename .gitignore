@@ -2,3 +2,4 @@
 /src/Nimflatbuffers/flatn/codegen/cppEffort/
 /src/Nimflatbuffers/flatn/codegen/outdated/
 /tests/test1.exe
+/lsp/

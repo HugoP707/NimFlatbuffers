@@ -134,16 +134,17 @@ proc VtableEqual*(a: seq[uoffset], objectStart: uoffset, b: seq[byte]): bool =
 
    var i = 0
    while i < a.len:
-      var seq = b[i * voffset.sizeof..(i + 1) * voffset.sizeof]
-      let x = GetVal[voffset](seq)
+      var seq = b[i * voffset.sizeof..<(i + 1) * voffset.sizeof]
+      let x = GetVal[voffset](addr seq)
 
       if x == 0 and a[i] == 0:
+         inc i
          continue
 
       let y = objectStart.soffset - a[i].soffset
       if x.soffset != y:
          return false
-
+      inc i
    return true
 
 proc WriteVtable*(this): uoffset =
@@ -164,7 +165,7 @@ proc WriteVtable*(this): uoffset =
 
       var seq = this.bytes[vt2Start..<this.bytes.len]
       let
-         vt2Len = GetVal[voffset](seq)
+         vt2Len = GetVal[voffset](addr seq)
          metadata = 2 * voffset.sizeof # VtableMetadataFields * SizeVOffsetT
          vt2End = vt2Start + vt2Len.int
          vt2 = this.bytes[this.bytes.len - vt2Offset.int + metadata..<vt2End]
@@ -228,7 +229,7 @@ proc EndVector*(this; vectorNumElems: int): uoffset =
 
 proc getChars*(str: seq[byte]): string =
    var bytes = str
-   result = GetVal[string](bytes)
+   result = GetVal[string](addr bytes)
 
 proc getBytes*(str: string | cstring): seq[byte] =
    for chr in str:
@@ -246,7 +247,7 @@ proc Create*[T](this; s: T): uoffset = #Both CreateString and CreateByteVector f
 
    this.head -= l
    when T is cstring or T is string:
-         this.bytes[this.head.int..this.head.int + 1] = s.getChars()
+         this.bytes[this.head.int..this.head.int + 1] = s.getBytes()
    else:
       this.bytes[this.head.int..this.head.int + 1] = s
    result = this.EndVector(s.len)

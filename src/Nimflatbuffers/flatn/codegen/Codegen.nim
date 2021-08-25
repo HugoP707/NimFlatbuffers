@@ -15,11 +15,11 @@ var
    unions {.compileTime.} : seq[Node]
 
 
-iterator names(nodes: var seq[Node]): string =
+iterator namesE(nodes: var seq[Node]): string =
    for node in nodes:
       yield node.children[0].children[0].lexeme
 
-iterator namesU(nodes: var seq[Node]): string =
+iterator names(nodes: var seq[Node]): string =
    for node in nodes:
       yield node.children[0].lexeme
 
@@ -27,6 +27,9 @@ proc getName(nodes: var seq[Node], name: string): Node =
    for node in nodes:
       if node.children[0].children[0].lexeme == name:
          return node
+
+proc getEnumName(node: Node): string =
+   node.children[0].children[0].lexeme
 
 proc findStruct(ident: string): Node {.used.} =
    for node in structs:
@@ -73,29 +76,6 @@ iterator fieldTypeSlots(node: Node): (string, string, int, int, int, Node) =
       elif child.children[1].kind == tkStruct:
          if maxSize < child.children[1].structSize:
             maxSize = child.children[1].structSize
-         #[
-         if child.children[1].children[0].lexeme in ["bool", "byte"]:
-            if maxSize < 1:
-               maxSize = 1
-         elif child.children[1].children[0].lexeme.contains("8"):
-            if maxSize < 1:
-               maxSize = 1
-         elif child.children[1].children[0].lexeme.contains("16"):
-            if maxSize < 2:
-               maxSize = 2
-         elif child.children[1].children[0].lexeme.contains("32"):
-            if maxSize < 4:
-               maxSize = 4
-         elif child.children[1].children[0].lexeme.contains("64"):
-            if maxSize < 8:
-               maxSize = 8
-         elif child.children[1].children[0].lexeme == "uoffset":
-            if maxSize < 4:
-               maxSize = 4
-         else:
-            if maxSize < 4:
-               maxSize = 4
-               ]#
       elif child.children[1].lexeme in ["bool", "byte"]:
          if maxSize < 1:
             maxSize = 1
@@ -156,7 +136,8 @@ iterator fieldTypeSlotsT(node: Node): (string, string, int) =
             maxSize = 4
          #quit("dont know wtf to do with strings")
       else:
-         maxSize = 4
+         if maxSize < 4:
+            maxSize = 4
 
    var i: int = 0
    for child in node.children[1].children:
@@ -181,9 +162,7 @@ proc newStructGetter(obj, field, typ: string, off: int): NimNode =
          ident typ,
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          )
       ],
@@ -244,9 +223,12 @@ proc newStructCreator(node: Node): NimNode {.used.} =
    var
       args: seq[NimNode]
       toPrepend: string
+      # structTyp = node.children[0].lexeme
+      # Dont use actual type, use uoffset
+      structTyp = "uoffset"
 
    args = @[
-      newEmptyNode(),
+      ident structTyp,
       nnkIdentDefs.newTree(
          ident "this",
          nnkVarTy.newTree(
@@ -273,7 +255,8 @@ proc newStructCreator(node: Node): NimNode {.used.} =
       args,
       parseStmt(
          "this.Prep(" & $node.alignment & ", " & $node.structSize & ")\n" &
-         toPrepend
+         toPrepend &
+         "result = this.Offset()"
 
       )
    )
@@ -287,7 +270,7 @@ proc newStruct(node: Node): seq[string] =
    var
       objType = nnkObjectTy.newTree(
          newEmptyNode(),
-         nnkOfInherit.newTree(
+      nnkOfInherit.newTree(
             ident"FlatObj"
          ),
          newEmptyNode() # objFields
@@ -296,7 +279,7 @@ proc newStruct(node: Node): seq[string] =
    for field, typ, off in node.fieldTypeSlotsT:
       mutatorProcs.add "\n"
       if typ notin BasicNimTypes:
-         if typ in toSeq(unions.namesU):
+         if typ in toSeq(unions.names):
             echo("ERROR IN FIELD: [", field, "]")
             echo("INVALID TYPE: [", typ, "] SKIPPING...")
             mutatorProcs.add("# SKIPPED FIELD, " & field & " of type " & typ)
@@ -325,9 +308,7 @@ proc newTableGetter(obj, field, typ: string, off: int): NimNode =
          ident typ,
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          )
       ],
@@ -340,6 +321,33 @@ proc newTableGetter(obj, field, typ: string, off: int): NimNode =
       )
    )
 
+# Struct getter
+proc newTableGetterS(obj, field, typ: string; off: int): NimNode =
+   result = newProc(
+      nnkPostFix.newTree(
+         ident "*",
+         ident field
+      ),
+      [
+         ident typ,
+         nnkIdentDefs.newTree(
+            ident "this",
+            ident obj,
+            newEmptyNode()
+         ),
+      ],
+      parseStmt(
+         #"var obj: " & typ & "\n" &
+         "var o = this.tab.Offset(" & $off & ")\n" &
+         "if o != 0:\n" &
+         "   " & "   var x = o + this.tab.Pos\n" &
+         "   " & "   result.Init(this.tab.Bytes, x)\n" &
+         "else:\n" &
+         "   " & "   result = default(type(result))\n"
+      )
+   )
+
+# Table getter
 proc newTableGetterT(obj, field, typ: string; off: int): NimNode =
    result = newProc(
       nnkPostFix.newTree(
@@ -350,9 +358,7 @@ proc newTableGetterT(obj, field, typ: string; off: int): NimNode =
          ident typ,
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          ),
       ],
@@ -403,16 +409,15 @@ proc newTableStringGetter(obj, field, typ: string; off: int): NimNode =
          ident typ,
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          )
       ],
       parseStmt(
          "var o = this.tab.Offset(" & $off & ")\n" &
          "if o != 0:\n" &
-         "   result = this.tab.ByteVector(o).getChars()\n" &
+         "   var Table = this.tab\n" &
+         "   result = Table.ByteVector(o).getChars()\n" &
          "else:\n" &
          "   discard\n"
       )
@@ -428,9 +433,7 @@ proc newTableArrayGetter(obj, field, typ: string; off, inlineSize, size: int): N
          ident typ,
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          ),
          nnkIdentDefs.newTree(
@@ -460,9 +463,7 @@ proc newTableArrayLength(obj, field, typ: string, off: int): NimNode =
          ident "int",
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          )
       ],
@@ -477,7 +478,7 @@ proc newTableArrayStarter(obj, field: string; inlineSize, fieldSize: int): NimNo
    result = newProc(
       nnkPostFix.newTree(
          ident "*",
-         ident obj & "Starter" & field & "Vector"
+         ident obj & "Start" & field & "Vector"
       ),
       [
          ident "uoffset",
@@ -509,9 +510,7 @@ proc newTableUnionTypeGetter(obj, field, typ: string, off: int): NimNode =
          ident typ,
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          )
       ],
@@ -560,9 +559,7 @@ proc newTableUnionGetter(obj, field, typ: string; off: int): NimNode =
          ident "FlatObj",
          nnkIdentDefs.newTree(
             ident "this",
-            nnkVarTy.newTree(
-               ident obj
-            ),
+            ident obj,
             newEmptyNode()
          ),
          #[nnkIdentDefs.newTree(
@@ -825,7 +822,7 @@ proc newTable(node: Node): seq[string] =
             mutatorProcs.add newTableArrayLength(objName[1].strVal, field, typ, off).stringify
       else:
          if typ notin BasicNimTypes:
-            if typ in toSeq(unions.namesU):
+            if typ in toSeq(unions.names):
                mutatorProcs.add "\n"
                mutatorProcs.add newTableUnionTypeGetter(objName[1].strVal, field, typ & "Type", off).stringify
                mutatorProcs.add "\n"
@@ -834,11 +831,17 @@ proc newTable(node: Node): seq[string] =
                mutatorProcs.add newTableUnionGetter(objName[1].strVal, field, "uoffset", off).stringify
                #mutatorProcs.add "\n"
                #mutatorProcs.add newTableUnionSetter(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
-            elif typ in toSeq(enums.names):
+            elif typ in toSeq(enums.namesE):
                mutatorProcs.add "\n"
                mutatorProcs.add newTableGetter(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
                mutatorProcs.add "\n"
                mutatorProcs.add newTableSetter(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
+            elif typ in toSeq(structs.names):
+               mutatorProcs.add "\n"
+               mutatorProcs.add newTableGetterS(objName[1].strVal, field, typ, off).stringify
+               # TODO: make this only added when --gen-mutable is passed (and also allow for --gen-mutable to be passed :p )
+               #mutatorProcs.add "\n"
+               #mutatorProcs.add newTableSetter(objName[1].strVal, field, typ, off).stringify
             else:
                mutatorProcs.add "\n"
                mutatorProcs.add newTableGetterT(objName[1].strVal, field, typ, off).stringify
@@ -855,7 +858,7 @@ proc newTable(node: Node): seq[string] =
                mutatorProcs.add newTableSetter(objName[1].strVal, field, typ, off).stringify
 
    result.add nnkTypeSection.newTree(nnkTypeDef.newTree(objName, newEmptyNode(), objType)).stringify
-   result.add "\n"
+   result.add "\n\n"
    result.add mutatorProcs
    result.add "\n"
    result.add newTableStarter(node).stringify
@@ -868,15 +871,15 @@ proc newTable(node: Node): seq[string] =
             child.children[1].inlineSize, child.children[1].fieldSize).stringify
       else:
          if typ notin BasicNimTypes:
-            if typ in toSeq(unions.namesU):
+            if typ in toSeq(unions.names):
                result.add newTableUnionTypeAdder(objName[1].strVal, field, typ & "Type", slo).stringify
                result.add "\n"
                # TODO: Consider creating a "type [UnionName] = uoffset" and use that instead of using "uoffset" directly
                result.add newTableUnionAdder(objName[1].strVal, field, "uoffset", slo).stringify
-            elif typ in toSeq(enums.names):
-               result.add newTableEnumAdder(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
+            elif typ in toSeq(enums.namesE):
+               result.add newTableEnumAdder(objName[1].strVal, field, getName(enums, typ).getEnumName(), slo).stringify
             else:
-               result.add newTableAdder(objName[1].strVal, field, typ, slo).stringify
+               result.add newTableAdder(objName[1].strVal, field, "uoffset", slo).stringify
          else:
             if typ == "string":
                result.add newTableStringAdder(objName[1].strVal, field, "uoffset", slo).stringify
@@ -978,20 +981,5 @@ macro generateCodeImpl*(path, filename, outputDir: static[string]; abs: static[b
            " at " & path)
 
    writeFile(path & "\\" & outputDir & "\\" & outputFile, fileContents[0..^3])
-   #[
-   err = gorgeEx(currentSourcePath() / "../../utils/moveFile " & path & "\\" & outputFile & " " &
-                path & "\\" & outputDir & "\\" & outputFile & "\\").exitCode
-   if err != 0:
-      quit("ERROR: " & $err & ". COULD NOT MOVE FILE: " & outputFile &
-           " to " & path & "\\" & outputDir & "\\")
-   ]#
-   #[
-   err = gorgeEx(currentSourcePath() / "../../utils/copyDir " &
 
-   currentSourcePath() / "../../../nimflatbuffers" & " " &
-   path & "\\" & outputDir & "\\" & "nimflatbuffers").exitCode
-   if err != 0:
-      quit("ERROR: " & $err & ". COULD COPY DIRECTORY: " & path & "nimflatbuffers" &
-           " to " & path & "\\" & outputDir & "\\" & "nimflatbuffers")
-   ]#
    result = parseExpr("import " & path & "\\" & outputDir & "\\" & outputFile[0..^5])

@@ -7,5 +7,5 @@ srcDir = "src"
 
 requires "nim >= 1.4.0"
 
-task test, "Runs the test":
-   exec "nim check tests/test1"
+task MonsterTest, "Runs the Monster test":
+   exec "nim c -r tests/Monster"

@@ -4,7 +4,7 @@ NimFlatbuffers
 A pure nim implementation of Flatbuffers + fbs macro file processor.
 --------------------------------------------------------------------
 
-WARNING: Still broken, hopefully fixed in the next few days
+WARNING: Partially working, still requires more work
 
 I finally wont be using c++ for the code generator, isntead, i used a macro, since it was more fitting, however, the code generator ended up being a bit wonky.
 

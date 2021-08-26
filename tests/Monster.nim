@@ -53,8 +53,8 @@ var orc = builder.MonsterEnd()
 builder.Finish(orc)
 
 var finishedBytes = builder.FinishedBytes()
+echo finishedBytes
 
-echo typeof Monster
 var aMonster: Monster
 GetRootAs(aMonster, finishedBytes, 0)
 

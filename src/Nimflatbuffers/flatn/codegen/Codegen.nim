@@ -1,7 +1,10 @@
+# TODO: Invertir orden de Prepend de las estructuras
+# TODO: Averiguar porque no lee la información correctamente
 import std/[os, macros]
 
 from std/sequtils import toSeq
 from std/strutils import replace, contains, parseInt, join
+from std/algorithm import reverse, reversed
 
 import ../utils/util
 import ../parser/[nodes, Parser]
@@ -166,8 +169,8 @@ proc newStructGetter(obj, field, typ: string, off: int): NimNode =
             newEmptyNode()
          )
       ],
-      parseStmt(
-         "result = this.tab.Get[:" & typ & "](this.tab.Pos + " & $off & ")\n"
+      parseStmt(  # TODO understand why the offset is wrong by -4, hardcoded solution should be provisional
+         "result = this.tab.Get[:" & typ & "](this.tab.Pos + " & $(off + 4) & ")\n"
       )
    )
 
@@ -187,8 +190,8 @@ proc newStructGetterT(obj, field, typ: string, off: int): NimNode =
             newEmptyNode()
          )
       ],
-      parseStmt(
-         "result = this.tab.Get[:" & typ & "](this.tab.Pos + " & $off & ")\n"
+      parseStmt(  # TODO understand why the offset is wrong by -4, hardcoded solution should be provisional
+         "result = this.tab.Get[:" & typ & "](this.tab.Pos + " & $(off + 4) & ")\n"
       )
    )
 
@@ -214,14 +217,15 @@ proc newStructSetter(obj, field, typ: string, off: int): NimNode =
          ),
          newEmptyNode()
       ],
-      parseStmt(
-         "discard this.tab.Mutate(this.tab.Pos + " & $off & ", n)"
+      parseStmt(  # TODO understand why the offset is wrong by -4, hardcoded solution should be provisional
+         "discard this.tab.Mutate(this.tab.Pos + " & $(off + 4) & ", n)"
       )
    )
 
 proc newStructCreator(node: Node): NimNode {.used.} =
    var
       args: seq[NimNode]
+      inputs: seq[NimNode]
       toPrepend: string
       # structTyp = node.children[0].lexeme
       # Dont use actual type, use uoffset
@@ -238,14 +242,16 @@ proc newStructCreator(node: Node): NimNode {.used.} =
       )
    ]
 
-   for child in node.children[1].children:
+   for child in node.children[1].children.reversed():
       toPrepend.add "this.Prepend(" & child.children[0].lexeme & ")"
       toPrepend.add "\n"
-      args.add nnkIdentDefs.newTree(
+      inputs.add nnkIdentDefs.newTree(
          ident child.children[0].lexeme,
          ident child.children[1].lexeme,
          newEmptyNode()
       )
+   inputs.reverse()
+   args.add inputs
 
    result = newProc(
       nnkPostFix.newTree(
@@ -292,7 +298,7 @@ proc newStruct(node: Node): seq[string] =
          mutatorProcs.add newStructSetter(objName[1].strVal, field, typ, off).stringify
 
    result.add nnkTypeSection.newTree(nnkTypeDef.newTree(objName, newEmptyNode(), objType)).stringify
-   result.add "\n"
+   result.add "\n\n"
    result.add mutatorProcs
    result.add "\n"
    result.add newStructCreator(node).stringify
@@ -833,9 +839,9 @@ proc newTable(node: Node): seq[string] =
                #mutatorProcs.add newTableUnionSetter(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
             elif typ in toSeq(enums.namesE):
                mutatorProcs.add "\n"
-               mutatorProcs.add newTableGetter(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
+               mutatorProcs.add newTableGetter(objName[1].strVal, field, getName(enums, typ).enumType, off).stringify
                mutatorProcs.add "\n"
-               mutatorProcs.add newTableSetter(objName[1].strVal, field, getName(enums, typ).enumType, slo).stringify
+               mutatorProcs.add newTableSetter(objName[1].strVal, field, getName(enums, typ).enumType, off).stringify
             elif typ in toSeq(structs.names):
                mutatorProcs.add "\n"
                mutatorProcs.add newTableGetterS(objName[1].strVal, field, typ, off).stringify

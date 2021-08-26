@@ -200,7 +200,6 @@ proc WriteVtable*(this): uoffset =
          (existingVtable - objectOffset).soffset)
 
       this.current_vtable = @[]
-
    result = objectOffset
 
 proc EndObject*(this): uoffset =

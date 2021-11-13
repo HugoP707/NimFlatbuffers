@@ -6,7 +6,7 @@ A pure nim implementation of Flatbuffers + fbs macro file processor.
 
 WARNING: Partially working, still requires more work
 
-I finally wont be using c++ for the code generator, isntead, i used a macro, since it was more fitting, however, the code generator ended up being a bit wonky.
+I finally wont be using c++ for the code generator, instead, i used a macro, since it was more fitting, however, the code generator ended up being a bit wonky.
 
 It supports a decent subset of .fbs schema language, from my experience, the most used one.
 
@@ -19,7 +19,8 @@ DONE               Structs
 DONE               Tables
 DONE               Unions
 TODO               Code reordering
-IN PROGRESS        Strings and vectors
+IN PROCESS         Default values
+IN PROCESS         Strings and vectors
 DONE               namespaces
 Wont do            Nested namespaces
 ============       ===================

@@ -18,11 +18,6 @@ table Monster {
   hp:short = 100;
   name:string;
   friendly:bool = false (deprecated);
-  inventory:[ubyte];  // Vector of scalars.
-  color:Color = Blue; // Enum.
-  weapons:[Weapon];   // Vector of tables.
-  equipped:Equipment; // Union.
-  path:[Vec3];        // Vector of structs.
 }
 
 table Weapon {

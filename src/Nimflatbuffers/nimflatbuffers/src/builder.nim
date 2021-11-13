@@ -246,7 +246,7 @@ proc Create*[T](this; s: T): uoffset = #Both CreateString and CreateByteVector f
 
    this.head -= l
    when T is cstring or T is string:
-         this.bytes[this.head.int..this.head.int + 1] = s.getBytes()
+      this.bytes[this.head.int..this.head.int + 1] = s.getBytes()
    else:
       this.bytes[this.head.int..this.head.int + 1] = s
    result = this.EndVector(s.len)

@@ -14,6 +14,7 @@ const
    # For comparing
    BasicNimTypes* = ["bool",
                      "byte",
+                     "byte",
                      "int8",
                      "uint8",
                      "int16",
@@ -106,6 +107,8 @@ proc echoNode(node: Node, tab: string = ""): string =
       for child in node.children:
          result.add tab & "   "
          result.add echoNode(child, tab & "   ")
+   else:
+      result.add("no children\n")
 
 proc echoNodes*(nodes: seq[Node]): string =
    for node in nodes:
@@ -221,7 +224,6 @@ proc parseEnum(this: var Node) =
          children: braceChildren
       )
    )
-
    this.children = childrenArr
 
 proc addEnum*(this: var seq[Node], x: Node) =
@@ -275,17 +277,37 @@ proc parseTable(this: var Node) =
                )
             )
          elif this.children[i + 1].lexeme in BasicTypes:
-            this.children[i + 1].lexeme = NimTypes[this.children[i + 1].lexeme]
-            this.children[i + 1].size = NimSizes[this.children[i + 1].lexeme]
-            braceChildren.add(
-               Node(
-                  kind: tkColon,
-                  children: @[
-                     this.children[i - 1],
-                     this.children[i + 1]
-                  ]
+            if this.children[i + 2].kind == tkEquals:
+               echo "WARNING: defualt value not handled yet"
+               this.children[i + 1].lexeme = NimTypes[this.children[i + 1].lexeme]
+               this.children[i + 1].size = NimSizes[this.children[i + 1].lexeme]
+               braceChildren.add(
+                  Node(
+                     kind: tkColon,
+                     children: @[
+                        this.children[i - 1],
+                        Node(
+                           kind: tkEquals,
+                           children: @[
+                              this.children[i + 1],
+                              this.children[i + 3]
+                           ]
+                        )
+                     ]
+                  )
                )
-            )
+            else:
+               this.children[i + 1].lexeme = NimTypes[this.children[i + 1].lexeme]
+               this.children[i + 1].size = NimSizes[this.children[i + 1].lexeme]
+               braceChildren.add(
+                  Node(
+                     kind: tkColon,
+                     children: @[
+                        this.children[i - 1],
+                        this.children[i + 1]
+                     ]
+                  )
+               )
          else:
             braceChildren.add(
                Node(
@@ -333,7 +355,7 @@ proc parseStruct(this: var Node) =
                StructAlignment = this.children[i + 1].size
             inc StructSize, this.children[i + 1].size
          else:
-            echo("WARNING SIZE IS NOT CORRECT")
+            echo "WARNING SIZE IS NOT CORRECT"
          braceChildren.add(
             Node(
                kind: tkColon,

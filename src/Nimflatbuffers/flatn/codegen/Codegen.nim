@@ -3,7 +3,7 @@
 import std/[os, macros]
 
 from std/sequtils import toSeq
-from std/strutils import replace, contains, parseInt, join
+from std/strutils import split, replace, contains, parseInt, join
 from std/algorithm import reverse, reversed
 
 import ../utils/util
@@ -72,29 +72,35 @@ iterator fieldTypeSlots(node: Node): (string, string, int, int, int, Node) =
    var maxSize: int = 0
    #var size: int = 0
    for child in node.children[1].children:
-      if child.children[1].kind == nkOpenArray:
+      var fieldNode = child.children[1]
+
+      if fieldNode.kind == tkEquals: # there is a default value, not handled yet
+         # set the string value of the tkEquals node to the field's type + its default value separated by "|"
+         fieldNode.lexeme = fieldNode.children[0].lexeme & "|" & fieldNode.children[1].lexeme
+      if fieldNode.kind == nkOpenArray:
          if maxSize < 4:
             maxSize = 4
-
-      elif child.children[1].kind == tkStruct:
-         if maxSize < child.children[1].structSize:
-            maxSize = child.children[1].structSize
-      elif child.children[1].lexeme in ["bool", "byte"]:
+      elif fieldNode.kind == tkStruct:
+         if maxSize < fieldNode.structSize:
+            maxSize = fieldNode.structSize
+      elif fieldNode.lexeme.contains("bool") or
+      fieldNode.lexeme.contains("byte") or
+      fieldNode.lexeme.contains("ubyte"):
          if maxSize < 1:
             maxSize = 1
-      elif child.children[1].lexeme.contains("8"):
+      elif fieldNode.lexeme.contains("8"):
          if maxSize < 1:
             maxSize = 1
-      elif child.children[1].lexeme.contains("16"):
+      elif fieldNode.lexeme.contains("16"):
          if maxSize < 2:
             maxSize = 2
-      elif child.children[1].lexeme.contains("32"):
+      elif fieldNode.lexeme.contains("32"):
          if maxSize < 4:
             maxSize = 4
-      elif child.children[1].lexeme.contains("64"):
+      elif fieldNode.lexeme.contains("64"):
          if maxSize < 8:
             maxSize = 8
-      elif child.children[1].lexeme == "string":
+      elif fieldNode.lexeme == "string":
          if maxSize < 4:
             maxSize = 4
       else:
@@ -105,14 +111,24 @@ iterator fieldTypeSlots(node: Node): (string, string, int, int, int, Node) =
       i: int = 1
       x: int = 0
    for child in node.children[1].children:
-      if child.children[1].children.len == 1:
+      var fieldNode = child.children[1]
+
+      if fieldNode.kind == tkEquals: # there is a default value, not handled yet
+         # set the string value of the tkEquals node to the field's type + its default value separated by "|"
+         fieldNode.lexeme = fieldNode.children[0].lexeme & "|" & fieldNode.children[1].lexeme
+
+      if fieldNode.children.len == 1:
          if child.kind == tkUnion:
-            yield (child.children[0].lexeme, child.children[1].children[0].lexeme, (i + 1) * 2, x, maxSize, child)
+            yield (child.children[0].lexeme, fieldNode.children[0].lexeme, (i + 1) * 2, x, maxSize, child)
             inc x
+         elif child.kind == tkString: # TODO handle strings
+            yield (child.children[0].lexeme, fieldNode.children[0].lexeme, (i + 1) * 2, x, maxSize, child)
+            inc x
+            inc i
          else:
-            yield (child.children[0].lexeme, child.children[1].children[0].lexeme, (i + 1) * 2, x, maxSize, child)
+            yield (child.children[0].lexeme, fieldNode.children[0].lexeme, (i + 1) * 2, x, maxSize, child)
       else:
-         yield (child.children[0].lexeme, child.children[1].lexeme, (i + 1) * 2, x, maxSize, child)
+         yield (child.children[0].lexeme, fieldNode.lexeme, (i + 1) * 2, x, maxSize, child)
       inc i
       inc x
 
@@ -286,8 +302,8 @@ proc newStruct(node: Node): seq[string] =
       mutatorProcs.add "\n"
       if typ notin BasicNimTypes:
          if typ in toSeq(unions.names):
-            echo("ERROR IN FIELD: [", field, "]")
-            echo("INVALID TYPE: [", typ, "] SKIPPING...")
+            echo "ERROR IN FIELD: [", field, "]"
+            echo "INVALID TYPE: [", typ, "] SKIPPING..."
             mutatorProcs.add("# SKIPPED FIELD, " & field & " of type " & typ)
          else:
             mutatorProcs.add newStructGetterT(objName[1].strVal, field, typ, off).stringify
@@ -304,7 +320,14 @@ proc newStruct(node: Node): seq[string] =
    result.add newStructCreator(node).stringify
    result.add "\n\n"
 
-proc newTableGetter(obj, field, typ: string, off: int): NimNode =
+proc newTableGetter(obj, field, typA: string, off: int): NimNode =
+   var typ: string
+   var defaultVal: string
+   if "|" in typA: # Default value
+      typ = typA.split("|")[0]
+      defaultVal = typA.split("|")[1]
+   else:
+      typ = typA
    result = newProc(
       nnkPostFix.newTree(
          ident "*",
@@ -379,7 +402,14 @@ proc newTableGetterT(obj, field, typ: string; off: int): NimNode =
       )
    )
 
-proc newTableSetter(obj, field, typ: string, off: int): NimNode =
+proc newTableSetter(obj, field, typA: string, off: int): NimNode =
+   var typ: string
+   var defaultVal: string
+   if "|" in typA: # Default value
+      typ = typA.split("|")[0]
+      defaultVal = typA.split("|")[1]
+   else:
+      typ = typA
    result = newProc(
       nnkPostFix.newTree(
          ident "*",
@@ -422,8 +452,7 @@ proc newTableStringGetter(obj, field, typ: string; off: int): NimNode =
       parseStmt(
          "var o = this.tab.Offset(" & $off & ")\n" &
          "if o != 0:\n" &
-         "   var Table = this.tab\n" &
-         "   result = Table.ByteVector(o).getChars()\n" &
+         "   result = this.tab.toString(o)\n" &
          "else:\n" &
          "   discard\n"
       )
@@ -827,7 +856,13 @@ proc newTable(node: Node): seq[string] =
             mutatorProcs.add "\n"
             mutatorProcs.add newTableArrayLength(objName[1].strVal, field, typ, off).stringify
       else:
-         if typ notin BasicNimTypes:
+         var hasDefault: bool = false
+         if "|" in typ: # only support default values for basic types, so we dont need to check for non basic types
+            hasDefault = true
+            if typ.split("|")[0] notin BasicNimTypes:
+               error("Dont support default values for non basic types")
+
+         if typ notin BasicNimTypes and not hasDefault:
             if typ in toSeq(unions.names):
                mutatorProcs.add "\n"
                mutatorProcs.add newTableUnionTypeGetter(objName[1].strVal, field, typ & "Type", off).stringify

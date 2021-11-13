@@ -1,0 +1,43 @@
+// This was a small part of the specific usecase I needed to cover
+
+namespace rlbot.flat;
+
+struct Vector3 {
+  x: float32;
+  y: float32;
+  z: float32;
+}
+
+table ControllerState {
+  /// -1 for full reverse, 1 for full forward
+  throttle:float;
+
+  /// -1 for full left, 1 for full right
+  steer:float;
+
+  /// -1 for nose down, 1 for nose up
+  pitch:float;
+
+  /// -1 for full left, 1 for full right
+  yaw:float;
+
+  /// -1 for roll left, 1 for roll right
+  roll:float;
+
+  /// true if you want to press the jump button
+  jump:bool;
+
+  /// true if you want to press the boost button
+  boost:bool;
+
+  /// true if you want to press the handbrake button
+  handbrake:bool;
+
+  /// true if you want to press the 'use item' button, used in rumble etc.
+  useItem:bool;
+}
+
+table PlayerInput {
+  playerIndex:int;
+  controllerState:ControllerState;
+}

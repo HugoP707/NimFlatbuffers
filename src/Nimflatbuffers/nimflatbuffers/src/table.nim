@@ -22,7 +22,7 @@ func GetVal*[T](b: ptr seq[byte]): T {.inline.} =
    elif T is float32:
       result = cast[T](GetVal[uint32](b))
    elif T is string:
-      result = cast[T](b[0])
+      result = cast[T](b[])
    else:
       if b[].len < T.sizeof:
          b[].setLen T.sizeof
@@ -42,7 +42,6 @@ template Get*[T](this; off: voffset): T =
    GetVal[T](addr seq)
 
 func WriteVal*[T: not SomeFloat](b: var openArray[byte], n: T) {.inline.} =
-   let _ = b[sizeof(T) - 1] # force some range checks
    when sizeof(T) == 8:
       littleEndianX(addr b[0], unsafeAddr n, T.sizeof)
    elif sizeof(T) == 4:
@@ -57,7 +56,6 @@ func WriteVal*[T: not SomeFloat](b: var openArray[byte], n: T) {.inline.} =
       #{.error:"shouldnt appear".}
 
 func WriteVal*[T: not SomeFloat](b: var seq[byte], n: T) {.inline.} =
-   let _ = b[sizeof(T) - 1] # force some range checks
    when sizeof(T) == 8:
       littleEndianX(addr b[0], unsafeAddr n, T.sizeof)
    elif sizeof(T) == 4:
@@ -123,6 +121,21 @@ func GetOffsetSlot*[T: Offsets](this; slot: voffset, d: T): T =
       return d
    return off
 
+func ByteVector*(this; off: uoffset): seq[byte] =
+   let
+      newoff: uoffset = off + this.Get[:uoffset](off)
+      start = newoff + (uoffset.sizeof).uoffset
+   var newseq = this.Bytes[newoff..^1]
+   debugEcho newseq
+   let
+      length = GetVal[uoffset](addr newseq)
+   debugEcho length
+   result = this.Bytes[start..start+length]
+
+func toString*(this; off: uoffset): string =
+   var seq = this.ByteVector(off)
+   result = GetVal[string](addr seq)
+
 using this: var Vtable
 
 proc Mutate*[T](this; off: uoffset, n: T): bool =
@@ -137,18 +150,3 @@ func MutateSlot*[T](this; slot: voffset, n: T): bool =
       discard this.Mutate(this.Pos + off.uoffset, n)
       return true
    return false
-
-func ByteVector*(this; off: uoffset): seq[byte] =
-   let
-      newoff: uoffset = off + this.Get[:uoffset](off)
-      start = newoff + (uoffset.sizeof).uoffset
-   var newseq = this.Bytes[newoff..^1]
-   let
-      length = GetVal[uoffset](addr newseq)
-
-   this.Bytes = newseq
-   result = this.Bytes[start..start+length]
-
-func toString*(this; off: uoffset): string =
-   var seq = this.ByteVector(off)
-   result = GetVal[string](addr seq)

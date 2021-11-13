@@ -11,14 +11,6 @@ type Parser* = object
    symbols*: seq[string]
    badSymbols*: seq[string]
 
-   case kind*: Tokenkind
-      of tkNumber:
-         floatVal*: float
-      of tkNamespace..tkEnum:
-         discard
-      else:
-         strVal*: string
-
 proc initParser*(this: var Parser, file: seq[Token]) =
    this.tokens = file
    this.current = 0
